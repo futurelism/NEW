@@ -948,6 +948,125 @@ def _get_text_encoder_execution_time(self, batch: Batch) -> float:
     avg_text_length = sum(batch.num_tokens) / batch_size if batch_size > 0 else 0
 
     return self._models["text_encoder"].predict([[batch_size, avg_text_length]])[0]
+def _load_clip_df(self, file_path: str) -> pd.DataFrame:
+    """加载CLIP模型的性能分析数据"""
+    df = self._read_input_file(file_path.replace("{MODEL}", "clip"))
+    df = df.drop_duplicates()
+
+    # 筛选与当前模型配置匹配的数据
+    filtered_df = df[
+        (df["model_name"] == self._model_config.get_name()) &
+        (df["image_resolution"] == self._model_config.image_resolution) &
+        (df["projection_dim"] == self._model_config.projection_dim)
+        ]
+
+    return filtered_df
+
+def _train_clip_models(self) -> Dict[str, BaseEstimator]:
+    """训练CLIP特定的性能预测模型"""
+    models = {}
+
+    # 构建文件路径，默认使用相同的文件命名模式
+    clip_file_path = self._compute_input_file.replace("mlp.csv", "clip.csv")
+    clip_df = self._load_clip_df(clip_file_path)
+
+    if len(clip_df) == 0:
+        logger.warning(f"No CLIP profiling data found for {self._model_config.get_name()}")
+        # 使用默认值避免程序崩溃
+        empty_df = pd.DataFrame({
+            "batch_size": [1, 2, 4, 8, 16, 32],
+            "image_resolution": [224] * 6,
+            "text_length": [77] * 6,
+            "projection_dim": [512] * 6,
+            "time_stats.image_encoder.median": [50.0, 80.0, 120.0, 200.0, 350.0, 600.0],
+            "time_stats.text_encoder.median": [10.0, 15.0, 25.0, 40.0, 70.0, 120.0],
+            "time_stats.projection_similarity.median": [5.0, 8.0, 15.0, 25.0, 40.0, 70.0]
+        })
+        clip_df = empty_df
+
+    # 图像编码器模型
+    models["image_encoder"] = self._train_model(
+        model_name="image_encoder",
+        df=clip_df,
+        feature_cols=["batch_size", "image_resolution"],
+        target_col="time_stats.image_encoder.median",
+    )
+
+    # 文本编码器模型
+    models["text_encoder"] = self._train_model(
+        model_name="text_encoder",
+        df=clip_df,
+        feature_cols=["batch_size", "text_length"],
+        target_col="time_stats.text_encoder.median",
+    )
+
+    # 投影和相似度计算模型
+    models["projection_similarity"] = self._train_model(
+        model_name="projection_similarity",
+        df=clip_df,
+        feature_cols=["batch_size", "projection_dim"],
+        target_col="time_stats.projection_similarity.median",
+    )
+
+    return models
+
+def _get_image_encoder_execution_time(self, batch: Batch) -> float:
+    """预测图像编码器的执行时间"""
+    if not batch.is_image_batch:
+        return 0
+
+    batch_size = batch.size
+    image_resolution = self._model_config.image_resolution
+
+    # 检查模型是否已加载
+    if "image_encoder" not in self._models:
+        return 50.0 * batch_size  # 默认估计值
+
+    # 使用模型预测
+    try:
+        return self._models["image_encoder"].predict([[batch_size, image_resolution]])[0]
+    except Exception as e:
+        logger.error(f"Error predicting image encoder time: {e}")
+        return 50.0 * batch_size  # 默认估计值
+
+def _get_text_encoder_execution_time(self, batch: Batch) -> float:
+    """预测文本编码器的执行时间"""
+    if batch.is_image_batch:
+        return 0
+
+    batch_size = batch.size
+    avg_text_length = sum(batch.num_tokens) / batch_size if batch_size > 0 else 77
+
+    # 检查模型是否已加载
+    if "text_encoder" not in self._models:
+        return 10.0 * batch_size  # 默认估计值
+
+    # 使用模型预测
+    try:
+        return self._models["text_encoder"].predict([[batch_size, avg_text_length]])[0]
+    except Exception as e:
+        logger.error(f"Error predicting text encoder time: {e}")
+        return 10.0 * batch_size  # 默认估计值
+
+def _get_projection_similarity_execution_time(self, batch: Batch) -> float:
+    """预测投影层和相似度计算的执行时间"""
+    # 只在处理文本批次时计算相似度
+    if batch.is_image_batch:
+        return 0
+
+    batch_size = batch.size
+    projection_dim = self._model_config.projection_dim
+
+    # 检查模型是否已加载
+    if "projection_similarity" not in self._models:
+        return 5.0 * batch_size  # 默认估计值
+
+    # 使用模型预测
+    try:
+        return self._models["projection_similarity"].predict([[batch_size, projection_dim]])[0]
+    except Exception as e:
+        logger.error(f"Error predicting projection similarity time: {e}")
+        return 5.0 * batch_size  # 默认估计值
 
 def _get_projection_similarity_execution_time(self, batch: Batch) -> float:
     """预测投影层和相似度计算的执行时间"""

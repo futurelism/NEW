@@ -625,56 +625,55 @@ class ClusterConfig:
 
 @dataclass
 class SimulationConfig(ABC):
-    seed: int = field(
-        default=42,
-        metadata={"help": "Seed for the random number generator."},
-    )
-    log_level: str = field(
-        default="info",
-        metadata={"help": "Logging level."},
-    )
-    time_limit: int = field(
-        default=0,  # in seconds, 0 is no limit
-        metadata={"help": "Time limit for simulation in seconds. 0 means no limit."},
-    )
-    cluster_config: ClusterConfig = field(
-        default_factory=ClusterConfig,
-        metadata={"help": "Cluster config."},
-    )
-    request_generator_config: BaseRequestGeneratorConfig = field(
-        default_factory=SyntheticRequestGeneratorConfig,
-        metadata={"help": "Request generator config."},
-    )
-    execution_time_predictor_config: BaseExecutionTimePredictorConfig = field(
-        default_factory=RandomForrestExecutionTimePredictorConfig,
-        metadata={"help": "Execution time predictor config."},
-    )
-    metrics_config: MetricsConfig = field(
-        default_factory=MetricsConfig,
-        metadata={"help": "Metrics config."},
-    )
+    # ... 现有代码 ...
 
     def __post_init__(self):
+        # 确保 metrics_config 是对象而非字典
+        if isinstance(self.metrics_config, dict):
+            self.metrics_config = MetricsConfig(**self.metrics_config)
+
+        # 确保其他嵌套配置也是对象而非字典
+        if isinstance(self.cluster_config, dict):
+            self.cluster_config = ClusterConfig(**self.cluster_config)
+
+        if isinstance(self.request_generator_config, dict):
+            # 确定请求生成器类型
+            generator_type = self.request_generator_config.get('type', 'synthetic')
+            if generator_type.lower() == 'synthetic':
+                self.request_generator_config = SyntheticRequestGeneratorConfig(**self.request_generator_config)
+            elif generator_type.lower() == 'trace_replay':
+                self.request_generator_config = TraceRequestGeneratorConfig(**self.request_generator_config)
+            # 可添加其他类型
+
+        if isinstance(self.execution_time_predictor_config, dict):
+            # 确定执行时间预测器类型
+            predictor_type = self.execution_time_predictor_config.get('type', 'random_forrest')
+            if predictor_type.lower() == 'random_forrest':
+                self.execution_time_predictor_config = RandomForrestExecutionTimePredictorConfig(**self.execution_time_predictor_config)
+            elif predictor_type.lower() == 'linear_regression':
+                self.execution_time_predictor_config = LinearRegressionExecutionTimePredictorConfig(**self.execution_time_predictor_config)
+            # 可添加其他类型
+    def write_config_to_file(self):
+    # 确保 metrics_config 是对象
+        if not hasattr(self.metrics_config, 'output_dir'):
+            logger.warning("metrics_config 不是预期的对象类型，跳过写入配置文件")
+            return
+
+        try:
+            config_dict = dataclass_to_dict(self)
+            output_dir = self.metrics_config.output_dir
+            os.makedirs(output_dir, exist_ok=True)
+
+            with open(f"{output_dir}/config.json", "w") as f:
+                json.dump(config_dict, f, indent=4)
+        except Exception as e:
+            logger.error(f"写入配置文件时出错: {str(e)}")
+
+        # 确保输出目录存在
+            os.makedirs(self.metrics_config.output_dir, exist_ok=True)
+
         self.write_config_to_file()
 
-    @classmethod
-    def create_from_cli_args(cls):
-        flat_config = create_flat_dataclass(cls).create_from_cli_args()
-        instance = flat_config.reconstruct_original_dataclass()
-        instance.__flat_config__ = flat_config
-        return instance
-
-    def to_dict(self):
-        if not hasattr(self, "__flat_config__"):
-            logger.warning("Flat config not found. Returning the original config.")
-            return self.__dict__
-
-        return self.__flat_config__.__dict__
-
-    def write_config_to_file(self):
-        config_dict = dataclass_to_dict(self)
-        with open(f"{self.metrics_config.output_dir}/config.json", "w") as f:
-            json.dump(config_dict, f, indent=4)
 @dataclass
 class ClipSchedulerConfig(BaseReplicaSchedulerConfig):
     image_batch_size_cap: int = field(

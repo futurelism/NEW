@@ -1,0 +1,4 @@
+model_name,batch_size,image_resolution,text_length,projection_dim,time_stats.image_encoder.median,time_stats.text_encoder.median,time_stats.projection_similarity.median
+openai/clip-vit-base-patch32,1,224,77,512,82.87026977539062,34.82316970825195,129.728515625
+openai/clip-vit-base-patch32,2,224,77,512,82.71974182128906,23.237632751464844,108.94438171386719
+openai/clip-vit-base-patch32,4,224,77,512,143.20230102539062,28.54604721069336,168.0650177001953

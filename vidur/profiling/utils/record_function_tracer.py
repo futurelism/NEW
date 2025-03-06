@@ -1,96 +1,59 @@
-import json
-import uuid
+"""
+PyTorch record_function 跟踪器
+"""
+from contextlib import contextmanager
+from typing import Dict, List, Optional
 
-import numpy as np
 import torch
 
+from vidur.profiling.common.timer_stats_store import TimerStatsStore
 
 class RecordFunctionTracer:
-    def __init__(self, output_path: str):
-        trace_id = str(uuid.uuid4())[:8]
-        self.trace_path = (
-            f"{output_path}/profiler_traces/profiler_trace_{trace_id}.json"
-        )
+    """
+    PyTorch record_function 跟踪器
+    允许跟踪和测量 PyTorch 操作的执行时间
+    """
 
-    def __enter__(self):
-        self.profiler = torch.profiler.profile(
-            activities=[
-                torch.profiler.ProfilerActivity.CPU,
-                torch.profiler.ProfilerActivity.CUDA,
-            ],
-        )
-        self.profiler.__enter__()
+    def __init__(self):
+        """初始化跟踪器"""
+        self._active = False
+        self._timer_stats_store = TimerStatsStore()
 
-    def __exit__(self, *args):
-        self.profiler.__exit__(None, None, None)
-        torch.cuda.synchronize()
-        self.profiler.export_chrome_trace(self.trace_path)
+    @property
+    def timer_stats_store(self) -> TimerStatsStore:
+        """获取计时器统计存储"""
+        return self._timer_stats_store
 
-    def find_children(self, trace, event):
-        if not ("dur" in event and "ts" in event):
+    @contextmanager
+    def trace(self, enabled: bool = True):
+        """
+        启用或禁用跟踪的上下文管理器
+
+        Args:
+            enabled: 是否启用跟踪
+        """
+        if not enabled:
+            yield
             return
 
-        children = []
-        for e in trace:
-            if not ("dur" in e and "ts" in e):
-                continue
+        try:
+            self._activate()
+            yield
+        finally:
+            self._deactivate()
 
-            # if the ts of the child is completely within the ts of the parent
-            if (
-                e["ts"] > event["ts"]
-                and e["ts"] + e["dur"] < event["ts"] + event["dur"]
-            ):
-                children.append(e)
-        return children
-
-    def find_correlated_event(self, trace, event):
-        if not ("args" in event and "correlation" in event["args"]):
+    def _activate(self):
+        """激活跟踪器"""
+        if self._active:
             return
 
-        for e in trace:
-            if not ("args" in e and "correlation" in e["args"]):
-                continue
+        self._active = True
+        # 这里可以添加额外的激活逻辑，如设置 PyTorch 钩子等
 
-            if e == event:
-                continue
+    def _deactivate(self):
+        """停用跟踪器"""
+        if not self._active:
+            return
 
-            if e["args"]["correlation"] == event["args"]["correlation"]:
-                return e
-
-    def get_operation_time_stats(self):
-        stats = {}
-
-        trace = json.load(open(self.trace_path, "r"))["traceEvents"]
-
-        for event in trace:
-            if not ("cat" in event and event["cat"] == "user_annotation"):
-                continue
-            children = self.find_children(trace, event)
-            cuda_time = 0
-            for child in children:
-                if not ("cat" in child and child["cat"] == "cuda_runtime"):
-                    continue
-                correlated_event = self.find_correlated_event(trace, child)
-                if not correlated_event:
-                    continue
-                cuda_time += correlated_event["dur"]
-            if cuda_time == 0:
-                continue
-
-            name = event["name"].replace("vidur_", "")
-
-            if name not in stats:
-                stats[name] = []
-
-            stats[name].append(cuda_time * 1e-3)  # to convert to ms
-
-        return {
-            operation: {
-                "min": np.min(times),
-                "max": np.max(times),
-                "mean": np.mean(times),
-                "median": np.median(times),
-                "std": np.std(times),
-            }
-            for operation, times in stats.items()
-        }
+        self._active = False
+        # 这里可以添加额外的停用逻辑

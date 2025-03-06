@@ -47,6 +47,7 @@ execution_time_predictor_config:
   prediction_max_batch_size: 128
   prediction_max_tokens_per_request: 128
 
+# 示例修复，确保 metrics_config 部分正确
 metrics_config:
   write_metrics: true
   write_json_trace: false
@@ -56,3 +57,4 @@ metrics_config:
   store_plots: true
   output_dir: simulator_output
   cache_dir: cache
+

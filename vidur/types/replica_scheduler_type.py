@@ -1,9 +1,10 @@
+from enum import auto
 from vidur.types.base_int_enum import BaseIntEnum
 
-
 class ReplicaSchedulerType(BaseIntEnum):
-    FASTER_TRANSFORMER = 1
-    ORCA = 2
-    SARATHI = 3
-    VLLM = 4
-    LIGHTLLM = 5
+    VLLM = auto()
+    ORCA = auto()
+    FASTER_TRANSFORMER = auto()
+    SARATHI = auto()
+    LIGHTLLM = auto()
+    CLIP = auto()  # 添加 CLIP 类型

@@ -1,0 +1,44 @@
+seed: 42
+log_level: info
+time_limit: 600
+
+metrics_config:
+  write_metrics: true
+  write_json_trace: false
+  wandb_project: clip_simulator
+  enable_chrome_trace: true
+  output_dir: simulator_output
+  cache_dir: cache
+
+cluster_config:
+  num_replicas: 1
+  replica_config:
+    model_name: openai/clip-vit-base-patch32
+    device: a100
+    network_device: a100_pairwise_nvlink
+    tensor_parallel_size: 1
+    num_pipeline_stages: 1
+  global_scheduler_config:
+    type: round_robin
+  replica_scheduler_config:
+    type: clip
+    batch_size_cap: 32
+    image_batch_size_cap: 16
+    text_batch_size_cap: 32
+
+request_generator_config:
+  type: synthetic
+  seed: 42
+  synthetic_request_generator_config_num_requests: 100
+  length_generator_config:
+    type: fixed
+    max_tokens: 77
+    prefill_tokens: 50
+    decode_tokens: 77
+  interval_generator_config:
+    type: poisson
+    qps: 5.0
+
+execution_time_predictor_config:
+  type: random_forrest
+  skip_cpu_overhead_modeling: true
