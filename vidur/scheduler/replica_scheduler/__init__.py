@@ -1,0 +1,6 @@
+from vidur.scheduler.replica_scheduler.clip_replica_scheduler import ClipReplicaScheduler
+from vidur.types import ReplicaSchedulerType
+from vidur.scheduler.replica_scheduler.replica_scheduler_registry import ReplicaSchedulerRegistry
+
+# 在其他注册之后添加
+ReplicaSchedulerRegistry.register(ReplicaSchedulerType.CLIP, ClipReplicaScheduler)

@@ -1,0 +1,58 @@
+# CLIP模拟器配置示例
+seed: 42
+log_level: info
+time_limit: 600  # 仿真时间限制(秒)
+
+cluster_config:
+  num_replicas: 1
+  replica_config:
+    model_name: openai/clip-vit-base-patch32
+    memory_margin_fraction: 0.1
+    num_pipeline_stages: 1
+    tensor_parallel_size: 1
+    device: a100
+    network_device: a100_pairwise_nvlink
+  global_scheduler_config:
+    type: round_robin
+  replica_scheduler_config:
+    type: clip
+    batch_size_cap: 64
+    image_batch_size_cap: 32
+    text_batch_size_cap: 128
+
+request_generator_config:
+  type: synthetic
+  seed: 42
+  length_generator_config:
+    type: fixed
+    seed: 42
+    max_tokens: 77  # CLIP默认最大文本长度
+    prefill_tokens: 50  # 图像tokens (224/32)^2 + 1 = 50 for ViT-B/32
+    decode_tokens: 77  # 文本tokens
+  interval_generator_config:
+    type: poisson
+    seed: 42
+    qps: 10.0
+  num_requests: 1000
+
+execution_time_predictor_config:
+  type: random_forrest
+  compute_input_file: ./data/profiling/compute/{DEVICE}/{MODEL}/clip.csv
+  attention_input_file: ./data/profiling/compute/{DEVICE}/{MODEL}/attention.csv
+  all_reduce_input_file: ./data/profiling/network/{NETWORK_DEVICE}/all_reduce.csv
+  send_recv_input_file: ./data/profiling/network/{NETWORK_DEVICE}/send_recv.csv
+  cpu_overhead_input_file: ./data/profiling/cpu_overhead/{NETWORK_DEVICE}/{MODEL}/cpu_overheads.csv
+  k_fold_cv_splits: 5
+  no_cache: false
+  prediction_max_batch_size: 128
+  prediction_max_tokens_per_request: 128
+
+metrics_config:
+  write_metrics: true
+  write_json_trace: false
+  wandb_project: clip_simulator
+  enable_chrome_trace: true
+  save_table_to_wandb: false
+  store_plots: true
+  output_dir: simulator_output
+  cache_dir: cache
